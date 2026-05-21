@@ -13,18 +13,10 @@ import (
 
 type BSCChain struct {
     client *ethclient.Client
-    config struct {
-        RPCURL       string
-        USDTContract string
-        Wallets      []string
-    }
+    config BSCConfig
 }
 
-func NewBSCChain(cfg struct {
-    RPCURL       string
-    USDTContract string
-    Wallets      []string
-}) *BSCChain {
+func NewBSCChain(cfg BSCConfig) *BSCChain {
     client, err := ethclient.Dial(cfg.RPCURL)
     if err != nil {
         panic(err)
