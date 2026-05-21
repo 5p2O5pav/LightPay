@@ -2,6 +2,7 @@ package main
 
 import (
     "bytes"
+    "embed"
     "encoding/json"
     "fmt"
     "log"
@@ -12,6 +13,9 @@ import (
 
     "github.com/gin-gonic/gin"
 )
+
+// 注意：webFiles 已在 main.go 中定义，这里需要引用外部变量，或者将 webFiles 移到全局
+// 为清晰，假设 webFiles 是全局可访问的（通过包变量）
 
 func CreateTransaction(c *gin.Context) {
     var req map[string]interface{}
@@ -33,7 +37,6 @@ func CreateTransaction(c *gin.Context) {
     log.Printf("[INFO] 收到订单创建请求: order_id=%s, amount=%.2f, raw_currency=%s, raw_token=%s, raw_network=%s",
         orderID, amountFloat, rawCurrency, rawToken, rawNetwork)
 
-    // 转为小写（用于内部处理）
     currency := strings.ToLower(rawCurrency)
     token := strings.ToLower(rawToken)
     network := strings.ToLower(rawNetwork)
@@ -52,7 +55,7 @@ func CreateTransaction(c *gin.Context) {
         network = "tron"
     }
 
-    // 签名验证（使用原始传入的值，保持与 PHP 一致）
+    // 签名验证
     signParams := map[string]interface{}{
         "pid":          pid,
         "order_id":     orderID,
@@ -65,18 +68,22 @@ func CreateTransaction(c *gin.Context) {
     }
     signature := fmt.Sprint(req["signature"])
     expectedSign := MakeSignatureFromMap(signParams, config.ApiToken)
-    log.Printf("[DEBUG] 签名对比: 收到=%s, 计算=%s", signature, expectedSign)
     if signature != expectedSign {
         log.Printf("[ERROR] 签名验证失败")
         c.JSON(http.StatusUnauthorized, gin.H{"status_code": 401, "message": "签名验证失败"})
         return
     }
-    log.Printf("[INFO] 签名验证通过")
 
-    handler, ok := chainRegistry[network]
+    // 获取链处理器（注意：现在每个链对象需要支持 token，但注册时是以链名为 key，一个链名对应一个处理器）
+    // 但我们的拆分方案中，tron 同时有 USDT 和 TRX 两个处理器，它们 Name() 都返回 "tron"，会冲突！
+    // 修正：链名应包含 token 区分，例如 "tron_usdt"、"tron_trx"、"polygon_usdt"、"bsc_usdt"
+    // 为保持向后兼容，建议在 registry 中使用 "chain:token" 作为 key。
+    // 这里简单起见，我们创建一个新的 map：chainTokenRegistry
+    handlerKey := network + ":" + token
+    handler, ok := chainTokenRegistry[handlerKey]
     if !ok {
-        log.Printf("[ERROR] 不支持的网络: %s", network)
-        c.JSON(http.StatusBadRequest, gin.H{"status_code": 400, "message": fmt.Sprintf("不支持的网络: %s", network)})
+        log.Printf("[ERROR] 不支持的链/币种组合: %s/%s", network, token)
+        c.JSON(http.StatusBadRequest, gin.H{"status_code": 400, "message": fmt.Sprintf("不支持的链/币种: %s/%s", network, token)})
         return
     }
 
@@ -86,23 +93,33 @@ func CreateTransaction(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "无可用钱包"})
         return
     }
-    log.Printf("[INFO] 分配地址: %s", address)
 
-    finalAmount, err := CalculateCryptoAmount(currency, token, amountFloat, config.Pricing)
+    // 计算基础金额（内部精度3位）
+    baseAmount, err := CalculateCryptoAmount(currency, token, amountFloat)
     if err != nil {
         log.Printf("[ERROR] 汇率计算失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "汇率计算失败"})
         return
     }
-    log.Printf("[INFO] 加密货币金额（最小单位）: %d", finalAmount)
 
-    lockedAmount, err := LockAmountWithIncrement(address, finalAmount)
+    // 加价分配唯一金额
+    finalAmount, err := LockAmountWithIncrement(address, baseAmount)
     if err != nil {
+        if err.Error() == "busy: too many pending orders with similar amount" {
+            // 返回交易火爆页面
+            c.Header("Content-Type", "text/html; charset=utf-8")
+            errorPage, _ := webFiles.ReadFile("web/error_busy.html")
+            if errorPage == nil {
+                c.String(http.StatusServiceUnavailable, "当前交易繁忙，请稍后再试")
+            } else {
+                c.Data(http.StatusServiceUnavailable, "text/html; charset=utf-8", errorPage)
+            }
+            return
+        }
         log.Printf("[ERROR] 无法分配支付金额: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "无法分配支付金额"})
         return
     }
-    log.Printf("[INFO] 锁定金额（最小单位）: %d", lockedAmount)
 
     tradeID := generateTradeID()
     order := &Order{
@@ -110,11 +127,11 @@ func CreateTransaction(c *gin.Context) {
         OrderID:     orderID,
         Pid:         pid,
         Chain:       network,
+        Token:       token,
         Address:     address,
-        Amount:      lockedAmount,
+        Amount:      finalAmount,
         FiatAmount:  amountFloat,
         Currency:    currency,
-        Token:       token,
         NotifyURL:   notifyURL,
         RedirectURL: redirectURL,
         Status:      "pending",
@@ -126,10 +143,11 @@ func CreateTransaction(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "订单保存失败"})
         return
     }
-    log.Printf("[INFO] 订单已保存: trade_id=%s", tradeID)
 
-    handler.EnsureAddressListener(address)
+    handler.EnsureAddressListener(address, token)
 
+    // 显示金额：内部精度转回显示（3位小数）
+    displayAmount := float64(finalAmount) / InternalPrecision
     paymentURL := fmt.Sprintf("https://%s/pay/%s", config.Server.Domain, tradeID)
     c.JSON(http.StatusOK, gin.H{
         "status_code": 200,
@@ -137,7 +155,7 @@ func CreateTransaction(c *gin.Context) {
         "data": gin.H{
             "trade_id":    tradeID,
             "order_id":    orderID,
-            "amount":      float64(lockedAmount) / 1e6,
+            "amount":      displayAmount,
             "address":     address,
             "payment_url": paymentURL,
             "expired_at":  order.ExpiredAt.Unix(),
@@ -145,19 +163,14 @@ func CreateTransaction(c *gin.Context) {
     })
 }
 
-// formatAmount 用于回调通知中的金额格式化（与 Epusdt 插件一致）
+// formatAmount 用于回调（保持3位小数）
 func formatAmount(v float64) string {
-    s := strconv.FormatFloat(v, 'f', -1, 64)
-    if s == "" {
-        return "0"
-    }
-    return s
+    return strconv.FormatFloat(v, 'f', 3, 64)
 }
 
-// sendOrderNotify 发送异步通知给商户
+// sendOrderNotify 回调商户（金额格式3位小数）
 func sendOrderNotify(order *Order) {
     if order.NotifyURL == "" {
-        log.Printf("[WARN] 订单 %s 没有通知地址，跳过回调", order.TradeID)
         return
     }
     params := map[string]string{
@@ -174,25 +187,21 @@ func sendOrderNotify(order *Order) {
 
     jsonData, _ := json.Marshal(params)
     client := &http.Client{Timeout: 15 * time.Second}
-    log.Printf("[INFO] 发送回调到 %s, 参数: %s", order.NotifyURL, string(jsonData))
-
     for i := 0; i < 3; i++ {
         resp, err := client.Post(order.NotifyURL, "application/json", bytes.NewBuffer(jsonData))
         if err == nil {
             resp.Body.Close()
             if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-                log.Printf("[INFO] 回调成功: HTTP %d", resp.StatusCode)
+                log.Printf("[INFO] 回调成功: %s", order.TradeID)
                 return
             }
-            log.Printf("[WARN] 回调返回非2xx状态码: %d, 重试 %d/3", resp.StatusCode, i+1)
-        } else {
-            log.Printf("[ERROR] 回调请求失败: %v, 重试 %d/3", err, i+1)
         }
         time.Sleep(time.Duration(i+1) * 2 * time.Second)
     }
-    log.Printf("[ERROR] 订单 %s 回调最终失败", order.TradeID)
+    log.Printf("[ERROR] 回调最终失败: %s", order.TradeID)
 }
 
+// QueryOrder, PayPage, GetOrderInfo, GetOrderStatus 等函数保持不变，但注意金额显示用3位
 func QueryOrder(c *gin.Context) {
     tradeID := c.Query("trade_id")
     order, err := GetOrderByTradeID(tradeID)
@@ -206,17 +215,15 @@ func QueryOrder(c *gin.Context) {
             "trade_id": order.TradeID,
             "order_id": order.OrderID,
             "status":   order.Status,
-            "amount":   float64(order.Amount) / 1e6,
+            "amount":   float64(order.Amount) / InternalPrecision,
         },
     })
 }
 
 func PayPage(c *gin.Context) {
-    // 注意：路径改为 "web/index.html"，因为 embed 的是整个 web 目录
     data, err := webFiles.ReadFile("web/index.html")
     if err != nil {
-        log.Printf("[ERROR] 读取 web/index.html 失败: %v", err)
-        c.String(http.StatusInternalServerError, "支付页面加载失败: 系统错误")
+        c.String(http.StatusInternalServerError, "支付页面加载失败")
         return
     }
     c.Data(http.StatusOK, "text/html; charset=utf-8", data)
@@ -232,7 +239,7 @@ func GetOrderInfo(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{
         "trade_id":   order.TradeID,
         "address":    order.Address,
-        "amount":     float64(order.Amount) / 1e6,
+        "amount":     float64(order.Amount) / InternalPrecision,
         "token":      order.Token,
         "network":    order.Chain,
         "expired_at": order.ExpiredAt.Unix(),
