@@ -212,7 +212,7 @@ func QueryOrder(c *gin.Context) {
 }
 
 func PayPage(c *gin.Context) {
-    c.FileFromFS("web/index.html", http.FS(webFiles))
+    c.FileFromFS("index.html", http.FS(webFiles))
 }
 
 func GetOrderInfo(c *gin.Context) {
