@@ -21,18 +21,16 @@ func StartTelegramBot(cfg *Config) {
     }
 
     ctx := context.Background()
-    // 每日总结命令
-    tgBot.RegisterHandler(bot.HandlerFunc(func(ctx context.Context, b *bot.Bot, update *bot.Update) {
-        if update.Message.Text == "/today" {
-            summary := getTodaySummary()
-            b.SendMessage(ctx, &bot.SendMessageParams{
-                ChatID: cfg.Telegram.ChatID,
-                Text:   summary,
-            })
-        }
-    }))
+    // 监听 /today 命令
+    tgBot.OnText("/today", func(ctx context.Context, msg *bot.Message) {
+        summary := getTodaySummary()
+        tgBot.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: cfg.Telegram.ChatID,
+            Text:   summary,
+        })
+    })
 
-    // 每日定时总结（20:00）
+    // 每日定时总结
     c := cron.New()
     c.AddFunc("0 20 * * *", func() {
         summary := getTodaySummary()
