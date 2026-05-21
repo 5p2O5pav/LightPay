@@ -4,22 +4,26 @@ server:
 
 database: "data/lightpay.db"
 
-api_token: "your-secret-signature-token"   # 用于 API 签名验证
+api_token: "your-secret-signature-token"
 
 tron:
   api_key: "your-trongrid-api-key"
-  network: "mainnet"                       # mainnet / shasta
+  network: "mainnet"
   wallets:
-    - "YOUR_TRC20_WALLET_ADDRESS_1"
-    - "YOUR_TRC20_WALLET_ADDRESS_2"
+    - "TRX_WALLET_1"
+    - "TRX_WALLET_2"
 
 polygon:
   rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"
   usdt_contract: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
   wallets:
-    - "YOUR_POLYGON_WALLET_ADDRESS_1"
+    - "POLY_WALLET_1"
 
-# 未来添加新链时在此增加对应的配置块
+bsc:
+  rpc_url: "https://bsc-dataseed.binance.org/"
+  usdt_contract: "0x55d398326f99059fF775485246999027B3197955"
+  wallets:
+    - "BSC_WALLET_1"
 
 telegram:
   enabled: false
@@ -27,5 +31,12 @@ telegram:
   chat_id: 0
 
 pricing:
-  default_currency: "USD"
+  default_currency: "CNY"
   markup_percent: 1.5
+  mode: "realtime"           # manual or realtime
+  manual_rates:
+    CNY_USDT: 7.25
+    CNY_TRX: 0.88
+  realtime:
+    provider: "coingecko"
+    cache_seconds: 60
