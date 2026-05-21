@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支付订单 - LightPay</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="payment-card">
+            <div class="header">
+                <img src="/static/logo.svg" alt="LightPay" class="logo">
+                <h1>USDT 支付</h1>
+            </div>
+            
+            <div class="amount-section">
+                <div class="amount-label">支付金额</div>
+                <div class="amount-value" id="amount">0.00 USDT</div>
+                <div class="amount-fiat" id="fiat-amount">≈ ¥0.00</div>
+            </div>
+            
+            <div class="address-section">
+                <div class="address-label">转账地址 (TRC20)</div>
+                <div class="address-box" id="address-box">
+                    <span id="address">TXN7bJ...aB91</span>
+                    <button onclick="copyAddress()" class="copy-btn">复制</button>
+                </div>
+            </div>
+            
+            <div class="qrcode-section">
+                <div id="qrcode"></div>
+                <p class="qrcode-hint">扫描二维码进行支付</p>
+            </div>
+            
+            <div class="timer-section">
+                <div class="timer-icon">⏳</div>
+                <div class="timer-text" id="timer">剩余 10:00</div>
+            </div>
+            
+            <div class="status-section">
+                <div class="status-pending" id="status">
+                    <div class="spinner"></div>
+                    <span>等待支付...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/qrcode.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
