@@ -33,10 +33,17 @@ telegram:
 pricing:
   default_currency: "CNY"
   markup_percent: 1.5
-  mode: "realtime"           # manual or realtime
+  mode: "realtime"                     # 或 manual
   manual_rates:
-    CNY_USDT: 7.25
+    CNY_USDT: 7.20
     CNY_TRX: 0.88
   realtime:
     provider: "coingecko"
+    url: "https://api.coingecko.com/api/v3/simple/price"
+    timeout_seconds: 5
+    retry_count: 2
     cache_seconds: 60
+    token_ids:
+      USDT: "tether"
+      TRX: "tron"
+      BUSD: "binance-usd"
