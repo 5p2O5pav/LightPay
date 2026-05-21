@@ -212,7 +212,14 @@ func QueryOrder(c *gin.Context) {
 }
 
 func PayPage(c *gin.Context) {
-    c.FileFromFS("index.html", http.FS(webFiles))
+    // 尝试读取嵌入的 index.html
+    data, err := webFiles.ReadFile("index.html")
+    if err != nil {
+        log.Printf("[ERROR] 读取 index.html 失败: %v", err)
+        c.String(http.StatusInternalServerError, "支付页面加载失败")
+        return
+    }
+    c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 }
 
 func GetOrderInfo(c *gin.Context) {
