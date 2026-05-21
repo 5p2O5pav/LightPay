@@ -1,11 +1,11 @@
 package main
 
 import (
-    "bytes"
-    "encoding/json"
     "fmt"
+    "log"
     "net/http"
     "strconv"
+    "strings"
     "time"
 
     "github.com/gin-gonic/gin"
@@ -20,12 +20,17 @@ func CreateTransaction(c *gin.Context) {
 
     pid := fmt.Sprint(req["pid"])
     orderID := fmt.Sprint(req["order_id"])
-    currency := fmt.Sprint(req["currency"])
-    token := fmt.Sprint(req["token"])
-    network := fmt.Sprint(req["network"])
+    rawCurrency := fmt.Sprint(req["currency"])
+    rawToken := fmt.Sprint(req["token"])
+    rawNetwork := fmt.Sprint(req["network"])
     amountFloat, _ := req["amount"].(float64)
     notifyURL := fmt.Sprint(req["notify_url"])
     redirectURL := fmt.Sprint(req["redirect_url"])
+
+    // 转为小写（用于内部处理）
+    currency := strings.ToLower(rawCurrency)
+    token := strings.ToLower(rawToken)
+    network := strings.ToLower(rawNetwork)
 
     if orderID == "" || amountFloat <= 0 {
         c.JSON(http.StatusBadRequest, gin.H{"status_code": 400, "message": "缺少必要参数"})
@@ -41,29 +46,19 @@ func CreateTransaction(c *gin.Context) {
         network = "tron"
     }
 
-    // 金额转为与 PHP 一致的字符串（去除末尾零和小数点）
-    amountStr := formatAmount(amountFloat)
-
-    // 签名验证
-    params := map[string]string{
+    // 签名验证（使用原始传入的值，保持与 PHP 一致）
+    signParams := map[string]interface{}{
         "pid":          pid,
         "order_id":     orderID,
-        "currency":     currency,
-        "token":        token,
-        "network":      network,
-        "amount":       amountStr,
+        "currency":     rawCurrency,
+        "token":        rawToken,
+        "network":      rawNetwork,
+        "amount":       amountFloat,
         "notify_url":   notifyURL,
         "redirect_url": redirectURL,
     }
     signature := fmt.Sprint(req["signature"])
-    expectedSign := MakeSignature(params, config.ApiToken)
-
-// ========== 添加这三行日志 ==========
-log.Printf("请求中的 signature: %s", signature)
-log.Printf("服务端计算的签名: %s", expectedSign)
-log.Printf("用于签名的参数: %+v", params)
-// =================================
-    
+    expectedSign := MakeSignatureFromMap(signParams, config.ApiToken)
     if signature != expectedSign {
         c.JSON(http.StatusUnauthorized, gin.H{"status_code": 401, "message": "签名验证失败"})
         return
@@ -81,9 +76,9 @@ log.Printf("用于签名的参数: %+v", params)
         return
     }
 
-    // 加密货币金额（最小单位）
     finalAmount, err := CalculateCryptoAmount(currency, token, amountFloat, config.Pricing)
     if err != nil {
+        log.Printf("汇率计算失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "汇率计算失败"})
         return
     }
