@@ -113,6 +113,18 @@ func formatAmountPHP(v float64) string {
     return s
 }
 
+// SelectWalletFromList 根据订单ID哈希选择一个钱包地址
+func SelectWalletFromList(wallets []string, orderID string) string {
+    h := 0
+    for _, c := range orderID {
+        h = h*31 + int(c)
+    }
+    if h < 0 {
+        h = -h
+    }
+    return wallets[h%len(wallets)]
+}
+
 // LockAmountWithIncrement 加价算法：同一地址+同一金额，尚未完成/过期的订单，新订单递增 0.001（内部单位 1），最多 20 次
 func LockAmountWithIncrement(address string, baseAmount int64) (int64, error) {
     lockMutex.Lock()
