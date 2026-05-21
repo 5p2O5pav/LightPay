@@ -1,8 +1,11 @@
 package main
 
 import (
+    "bytes"
+    "encoding/json"
     "fmt"
     "net/http"
+    "strconv"
     "time"
 
     "github.com/gin-gonic/gin"
@@ -38,19 +41,22 @@ func CreateTransaction(c *gin.Context) {
         network = "tron"
     }
 
-    // 签名验证使用独立的 api_token
+    // 金额转为与 PHP 一致的字符串（去除末尾零和小数点）
+    amountStr := formatAmount(amountFloat)
+
+    // 签名验证
     params := map[string]string{
         "pid":          pid,
         "order_id":     orderID,
         "currency":     currency,
         "token":        token,
         "network":      network,
-        "amount":       fmt.Sprintf("%.2f", amountFloat),
+        "amount":       amountStr,
         "notify_url":   notifyURL,
         "redirect_url": redirectURL,
     }
     signature := fmt.Sprint(req["signature"])
-    expectedSign := MakeSignature(params, config.ApiToken) // 独立 token
+    expectedSign := MakeSignature(params, config.ApiToken)
     if signature != expectedSign {
         c.JSON(http.StatusUnauthorized, gin.H{"status_code": 401, "message": "签名验证失败"})
         return
@@ -68,7 +74,7 @@ func CreateTransaction(c *gin.Context) {
         return
     }
 
-    // 金额转换为最小单位
+    // 加密货币金额（最小单位）
     finalAmount, err := CalculateCryptoAmount(currency, token, amountFloat, config.Pricing)
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "汇率计算失败"})
@@ -85,9 +91,11 @@ func CreateTransaction(c *gin.Context) {
     order := &Order{
         TradeID:     tradeID,
         OrderID:     orderID,
+        Pid:         pid,
         Chain:       network,
         Address:     address,
         Amount:      lockedAmount,
+        FiatAmount:  amountFloat,
         Currency:    currency,
         Token:       token,
         NotifyURL:   notifyURL,
@@ -116,6 +124,51 @@ func CreateTransaction(c *gin.Context) {
             "expired_at":  order.ExpiredAt.Unix(),
         },
     })
+}
+
+// formatAmount 与 PHP 的 rtrim(rtrim(sprintf('%.12F', $value), '0'), '.') 行为一致
+func formatAmount(v float64) string {
+    // 使用 'f' 格式，-1 表示自动去除末尾零
+    s := strconv.FormatFloat(v, 'f', -1, 64)
+    // 防止空字符串（极小概率）
+    if s == "" {
+        return "0"
+    }
+    return s
+}
+
+// 发送异步通知给商户
+func sendOrderNotify(order *Order) {
+    if order.NotifyURL == "" {
+        return
+    }
+    // 构造回调参数（与 Epusdt 规范一致）
+    params := map[string]string{
+        "trade_id":   order.TradeID,
+        "order_id":   order.OrderID,
+        "status":     "2", // 2 表示支付成功
+        "amount":     formatAmount(order.FiatAmount),
+        "currency":   order.Currency,
+        "token":      order.Token,
+        "network":    order.Chain,
+        "pid":        order.Pid,
+    }
+    params["signature"] = MakeSignature(params, config.ApiToken)
+
+    jsonData, _ := json.Marshal(params)
+    client := &http.Client{Timeout: 15 * time.Second}
+
+    // 重试 3 次
+    for i := 0; i < 3; i++ {
+        resp, err := client.Post(order.NotifyURL, "application/json", bytes.NewBuffer(jsonData))
+        if err == nil {
+            resp.Body.Close()
+            if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+                break
+            }
+        }
+        time.Sleep(time.Duration(i+1) * 2 * time.Second)
+    }
 }
 
 func QueryOrder(c *gin.Context) {
