@@ -16,6 +16,7 @@ import (
 func CreateTransaction(c *gin.Context) {
     var req map[string]interface{}
     if err := c.BindJSON(&req); err != nil {
+        log.Printf("[ERROR] 绑定请求参数失败: %v", err)
         c.JSON(http.StatusBadRequest, gin.H{"status_code": 400, "message": "请求参数错误"})
         return
     }
@@ -28,6 +29,9 @@ func CreateTransaction(c *gin.Context) {
     amountFloat, _ := req["amount"].(float64)
     notifyURL := fmt.Sprint(req["notify_url"])
     redirectURL := fmt.Sprint(req["redirect_url"])
+
+    log.Printf("[INFO] 收到订单创建请求: order_id=%s, amount=%.2f, raw_currency=%s, raw_token=%s, raw_network=%s",
+        orderID, amountFloat, rawCurrency, rawToken, rawNetwork)
 
     // 转为小写（用于内部处理）
     currency := strings.ToLower(rawCurrency)
@@ -61,35 +65,44 @@ func CreateTransaction(c *gin.Context) {
     }
     signature := fmt.Sprint(req["signature"])
     expectedSign := MakeSignatureFromMap(signParams, config.ApiToken)
+    log.Printf("[DEBUG] 签名对比: 收到=%s, 计算=%s", signature, expectedSign)
     if signature != expectedSign {
+        log.Printf("[ERROR] 签名验证失败")
         c.JSON(http.StatusUnauthorized, gin.H{"status_code": 401, "message": "签名验证失败"})
         return
     }
+    log.Printf("[INFO] 签名验证通过")
 
     handler, ok := chainRegistry[network]
     if !ok {
+        log.Printf("[ERROR] 不支持的网络: %s", network)
         c.JSON(http.StatusBadRequest, gin.H{"status_code": 400, "message": fmt.Sprintf("不支持的网络: %s", network)})
         return
     }
 
     address, err := handler.SelectWallet(orderID)
     if err != nil {
+        log.Printf("[ERROR] 无可用钱包: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "无可用钱包"})
         return
     }
+    log.Printf("[INFO] 分配地址: %s", address)
 
     finalAmount, err := CalculateCryptoAmount(currency, token, amountFloat, config.Pricing)
     if err != nil {
-        log.Printf("汇率计算失败: %v", err)
+        log.Printf("[ERROR] 汇率计算失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "汇率计算失败"})
         return
     }
+    log.Printf("[INFO] 加密货币金额（最小单位）: %d", finalAmount)
 
     lockedAmount, err := LockAmountWithIncrement(address, finalAmount)
     if err != nil {
+        log.Printf("[ERROR] 无法分配支付金额: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "无法分配支付金额"})
         return
     }
+    log.Printf("[INFO] 锁定金额（最小单位）: %d", lockedAmount)
 
     tradeID := generateTradeID()
     order := &Order{
@@ -109,9 +122,11 @@ func CreateTransaction(c *gin.Context) {
         CreatedAt:   time.Now(),
     }
     if err := SaveOrder(order); err != nil {
+        log.Printf("[ERROR] 订单保存失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"status_code": 500, "message": "订单保存失败"})
         return
     }
+    log.Printf("[INFO] 订单已保存: trade_id=%s", tradeID)
 
     handler.EnsureAddressListener(address)
 
@@ -130,27 +145,25 @@ func CreateTransaction(c *gin.Context) {
     })
 }
 
-// formatAmount 与 PHP 的 rtrim(rtrim(sprintf('%.12F', $value), '0'), '.') 行为一致
+// formatAmount 用于回调通知中的金额格式化（与 Epusdt 插件一致）
 func formatAmount(v float64) string {
-    // 使用 'f' 格式，-1 表示自动去除末尾零
     s := strconv.FormatFloat(v, 'f', -1, 64)
-    // 防止空字符串（极小概率）
     if s == "" {
         return "0"
     }
     return s
 }
 
-// 发送异步通知给商户
+// sendOrderNotify 发送异步通知给商户
 func sendOrderNotify(order *Order) {
     if order.NotifyURL == "" {
+        log.Printf("[WARN] 订单 %s 没有通知地址，跳过回调", order.TradeID)
         return
     }
-    // 构造回调参数（与 Epusdt 规范一致）
     params := map[string]string{
         "trade_id":   order.TradeID,
         "order_id":   order.OrderID,
-        "status":     "2", // 2 表示支付成功
+        "status":     "2",
         "amount":     formatAmount(order.FiatAmount),
         "currency":   order.Currency,
         "token":      order.Token,
@@ -161,18 +174,23 @@ func sendOrderNotify(order *Order) {
 
     jsonData, _ := json.Marshal(params)
     client := &http.Client{Timeout: 15 * time.Second}
+    log.Printf("[INFO] 发送回调到 %s, 参数: %s", order.NotifyURL, string(jsonData))
 
-    // 重试 3 次
     for i := 0; i < 3; i++ {
         resp, err := client.Post(order.NotifyURL, "application/json", bytes.NewBuffer(jsonData))
         if err == nil {
             resp.Body.Close()
             if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-                break
+                log.Printf("[INFO] 回调成功: HTTP %d", resp.StatusCode)
+                return
             }
+            log.Printf("[WARN] 回调返回非2xx状态码: %d, 重试 %d/3", resp.StatusCode, i+1)
+        } else {
+            log.Printf("[ERROR] 回调请求失败: %v, 重试 %d/3", err, i+1)
         }
         time.Sleep(time.Duration(i+1) * 2 * time.Second)
     }
+    log.Printf("[ERROR] 订单 %s 回调最终失败", order.TradeID)
 }
 
 func QueryOrder(c *gin.Context) {
