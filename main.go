@@ -13,7 +13,7 @@ import (
     "github.com/gin-gonic/gin"
 )
 
-//go:embed web/*
+//go:embed web
 var webFiles embed.FS
 
 var (
