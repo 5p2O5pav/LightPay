@@ -5,80 +5,55 @@ import (
     "fmt"
     "io"
     "net/http"
-    "sync"
     "time"
 )
 
-// 监听器管理
-var (
-    listeners   = map[string]chan struct{}{}
-    listenersMu sync.Mutex
-)
-
-// 确保为指定地址启动专属监听（如果尚未启动）
-func ensureListenerForAddress(address string, cfg *Config) {
-    listenersMu.Lock()
-    defer listenersMu.Unlock()
-
-    if _, exists := listeners[address]; exists {
-        return // 已在监听
-    }
-
-    stop := make(chan struct{})
-    listeners[address] = stop
-
-    go func() {
-        // 有活跃订单时用较短间隔，减少延迟
-        ticker := time.NewTicker(3 * time.Second)
-        defer ticker.Stop()
-
-        for {
-            select {
-            case <-ticker.C:
-                checkTronTransactions(address, cfg)
-                // 如果该地址不再有未支付订单，退出监听
-                if !hasPendingOrdersForAddress(address) {
-                    listenersMu.Lock()
-                    delete(listeners, address)
-                    listenersMu.Unlock()
-                    return
-                }
-            case <-stop:
-                return
-            }
-        }
-    }()
+type TronChain struct {
+    config TronConfig
 }
 
-// 查询地址最近交易，匹配订单
-func checkTronTransactions(address string, cfg *Config) {
-    url := fmt.Sprintf(
-        "https://api.trongrid.io/v1/accounts/%s/transactions/trc20?limit=10",
-        address,
-    )
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return
-    }
-    req.Header.Set("TRON-PRO-API-KEY", cfg.Tron.ApiKey)
+type TronConfig struct {
+    ApiKey  string   `yaml:"api_key"`
+    Network string   `yaml:"network"`
+    Wallets []string `yaml:"wallets"`
+}
 
+func (t *TronChain) Name() string { return "tron" }
+
+func (t *TronChain) GetWalletAddresses() []string {
+    return t.config.Wallets
+}
+
+func (t *TronChain) SelectWallet(orderID string) (string, error) {
+    // 公共的简单轮选，也可以在 config 中预设选择逻辑
+    return SelectWalletFromList(t.config.Wallets, orderID), nil
+}
+
+func (t *TronChain) FetchRecentTransactions(address string, since time.Time) ([]IncomingTx, error) {
+    // 调用 TronGrid API，用 since 过滤时间
+    url := fmt.Sprintf("https://api.trongrid.io/v1/accounts/%s/transactions/trc20?limit=20&min_timestamp=%d",
+        address, since.UnixMilli())
+    req, _ := http.NewRequest("GET", url, nil)
+    req.Header.Set("TRON-PRO-API-KEY", t.config.ApiKey)
     client := &http.Client{Timeout: 10 * time.Second}
     resp, err := client.Do(req)
     if err != nil {
-        return
+        return nil, err
     }
     defer resp.Body.Close()
-
     body, _ := io.ReadAll(resp.Body)
-    var result map[string]interface{}
+    var result TronResponse
     json.Unmarshal(body, &result)
-
-    // 解析交易并匹配订单（这里需要你已有的订单匹配逻辑）
-    processTronTransactions(address, result)
+    // 解析成 []IncomingTx
+    return parseTronTransactions(result, address), nil
 }
 
-// 检查地址是否仍有未支付订单（需从订单数据查询）
-func hasPendingOrdersForAddress(address string) bool {
-    // 查询数据库或内存映射，返回该地址是否还有 status=pending 的订单
-    return GetPendingOrderCountForAddress(address) > 0
+func (t *TronChain) EnsureAddressListener(address string) {
+    ensureListenerForChain(t, address)
+}
+
+// 辅助：解析 TRON 返回的交易
+func parseTronTransactions(resp TronResponse, targetAddr string) []IncomingTx {
+    // 实现省略，提取 to == targetAddr 且 token='USDT' 的交易
+    // 返回 []IncomingTx
 }
