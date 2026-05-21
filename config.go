@@ -11,6 +11,7 @@ type Config struct {
     ApiToken string         `yaml:"api_token"`
     Tron     TronConfig     `yaml:"tron"`
     Polygon  PolygonConfig  `yaml:"polygon"`
+    BSC      BSCConfig      `yaml:"bsc"`   // 新增 BSC 配置
     Telegram TelegramConfig `yaml:"telegram"`
     Pricing  PricingConfig  `yaml:"pricing"`
 }
@@ -32,6 +33,12 @@ type PolygonConfig struct {
     Wallets      []string `yaml:"wallets"`
 }
 
+type BSCConfig struct {
+    RPCURL       string   `yaml:"rpc_url"`
+    USDTContract string   `yaml:"usdt_contract"`
+    Wallets      []string `yaml:"wallets"`
+}
+
 type TelegramConfig struct {
     Enabled  bool   `yaml:"enabled"`
     BotToken string `yaml:"bot_token"`
@@ -39,8 +46,14 @@ type TelegramConfig struct {
 }
 
 type PricingConfig struct {
-    DefaultCurrency string  `yaml:"default_currency"`
-    MarkupPercent   float64 `yaml:"markup_percent"`
+    DefaultCurrency string            `yaml:"default_currency"`
+    MarkupPercent   float64           `yaml:"markup_percent"`
+    Mode            string            `yaml:"mode"`          // manual / realtime
+    ManualRates     map[string]float64 `yaml:"manual_rates"` // 如 "CNY_USDT": 7.25
+    Realtime        struct {
+        Provider     string `yaml:"provider"`
+        CacheSeconds int    `yaml:"cache_seconds"`
+    } `yaml:"realtime"`
 }
 
 func LoadConfig(path string) *Config {
@@ -53,6 +66,17 @@ func LoadConfig(path string) *Config {
             Listen: ":8080",
         },
         Database: "data/lightpay.db",
+        // 设置默认值
+        Pricing: PricingConfig{
+            Mode: "manual",
+            Realtime: struct {
+                Provider     string `yaml:"provider"`
+                CacheSeconds int    `yaml:"cache_seconds"`
+            }{
+                Provider:     "coingecko",
+                CacheSeconds: 60,
+            },
+        },
     }
     err = yaml.Unmarshal(data, config)
     if err != nil {
