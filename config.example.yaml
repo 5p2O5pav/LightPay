@@ -1,0 +1,31 @@
+server:
+  listen: ":8080"
+  domain: "pay.example.com"
+
+database: "data/lightpay.db"
+
+api_token: "your-secret-signature-token"   # 用于 API 签名验证
+
+tron:
+  api_key: "your-trongrid-api-key"
+  network: "mainnet"                       # mainnet / shasta
+  wallets:
+    - "YOUR_TRC20_WALLET_ADDRESS_1"
+    - "YOUR_TRC20_WALLET_ADDRESS_2"
+
+polygon:
+  rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"
+  usdt_contract: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+  wallets:
+    - "YOUR_POLYGON_WALLET_ADDRESS_1"
+
+# 未来添加新链时在此增加对应的配置块
+
+telegram:
+  enabled: false
+  bot_token: ""
+  chat_id: 0
+
+pricing:
+  default_currency: "USD"
+  markup_percent: 1.5
