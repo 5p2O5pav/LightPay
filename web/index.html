@@ -11,19 +11,20 @@
         <div class="payment-card">
             <div class="header">
                 <img src="/static/logo.svg" alt="LightPay" class="logo">
-                <h1>USDT 支付</h1>
+                <h1 id="token-title">USDT 支付</h1>
             </div>
             
             <div class="amount-section">
                 <div class="amount-label">支付金额</div>
-                <div class="amount-value" id="amount">0.00 USDT</div>
+                <div class="amount-value" id="amount">0.00</div>
                 <div class="amount-fiat" id="fiat-amount">≈ ¥0.00</div>
             </div>
             
             <div class="address-section">
-                <div class="address-label">转账地址 (TRC20)</div>
+                <!-- 网络标签改为动态 -->
+                <div class="address-label">转账地址 (<span id="network-tag">...</span>)</div>
                 <div class="address-box" id="address-box">
-                    <span id="address">TXN7bJ...aB91</span>
+                    <span id="address">...</span>
                     <button onclick="copyAddress()" class="copy-btn">复制</button>
                 </div>
             </div>
@@ -35,7 +36,7 @@
             
             <div class="timer-section">
                 <div class="timer-icon">⏳</div>
-                <div class="timer-text" id="timer">剩余 10:00</div>
+                <div class="timer-text" id="timer">剩余 --:--</div>
             </div>
             
             <div class="status-section">
