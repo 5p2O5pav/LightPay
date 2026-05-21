@@ -11,7 +11,7 @@ type Config struct {
     ApiToken string         `yaml:"api_token"`
     Tron     TronConfig     `yaml:"tron"`
     Polygon  PolygonConfig  `yaml:"polygon"`
-    BSC      BSCConfig      `yaml:"bsc"`   // 新增 BSC 配置
+    BSC      BSCConfig      `yaml:"bsc"`
     Telegram TelegramConfig `yaml:"telegram"`
     Pricing  PricingConfig  `yaml:"pricing"`
 }
@@ -45,15 +45,21 @@ type TelegramConfig struct {
     ChatID   int64  `yaml:"chat_id"`
 }
 
+type RealtimeConfig struct {
+    Provider       string            `yaml:"provider"`
+    URL            string            `yaml:"url"`
+    TimeoutSeconds int               `yaml:"timeout_seconds"`
+    RetryCount     int               `yaml:"retry_count"`
+    CacheSeconds   int               `yaml:"cache_seconds"`
+    TokenIds       map[string]string `yaml:"token_ids"`
+}
+
 type PricingConfig struct {
-    DefaultCurrency string            `yaml:"default_currency"`
-    MarkupPercent   float64           `yaml:"markup_percent"`
-    Mode            string            `yaml:"mode"`          // manual / realtime
-    ManualRates     map[string]float64 `yaml:"manual_rates"` // 如 "CNY_USDT": 7.25
-    Realtime        struct {
-        Provider     string `yaml:"provider"`
-        CacheSeconds int    `yaml:"cache_seconds"`
-    } `yaml:"realtime"`
+    DefaultCurrency string             `yaml:"default_currency"`
+    MarkupPercent   float64            `yaml:"markup_percent"`
+    Mode            string             `yaml:"mode"`
+    ManualRates     map[string]float64 `yaml:"manual_rates"`
+    Realtime        RealtimeConfig     `yaml:"realtime"`
 }
 
 func LoadConfig(path string) *Config {
@@ -61,26 +67,11 @@ func LoadConfig(path string) *Config {
     if err != nil {
         panic(err)
     }
-    config := &Config{
-        Server: ServerConfig{
-            Listen: ":8080",
-        },
-        Database: "data/lightpay.db",
-        // 设置默认值
-        Pricing: PricingConfig{
-            Mode: "manual",
-            Realtime: struct {
-                Provider     string `yaml:"provider"`
-                CacheSeconds int    `yaml:"cache_seconds"`
-            }{
-                Provider:     "coingecko",
-                CacheSeconds: 60,
-            },
-        },
-    }
+    config := &Config{}
     err = yaml.Unmarshal(data, config)
     if err != nil {
         panic(err)
     }
+    // 不再设置任何默认值，所有字段必须由 yaml 文件提供
     return config
 }
