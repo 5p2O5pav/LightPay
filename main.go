@@ -18,28 +18,43 @@ import (
 var webFiles embed.FS
 
 var (
-    chainRegistry = map[string]ChainHandler{}
-    config        *Config
+    // 原 chainRegistry 保留兼容（但不再使用），改用 chainTokenRegistry
+    chainTokenRegistry = map[string]ChainHandler{}
+    config *Config
 )
 
-func registerChain(h ChainHandler) {
-    chainRegistry[h.Name()] = h
+func registerChainToken(handler ChainHandler, chain, token string) {
+    key := chain + ":" + token
+    chainTokenRegistry[key] = handler
 }
 
 func main() {
     config = LoadConfig("config.yaml")
     InitDB(config)
 
-    // 注册链
+    // 注册 Tron USDT
     if len(config.Tron.Wallets) > 0 {
-        tron := &TronChain{config: config.Tron}
-        registerChain(tron)
-        log.Println("注册链: tron")
+        tronUSDT := &TronUSDTChain{config: config.Tron}
+        registerChainToken(tronUSDT, "tron", "usdt")
+        log.Println("注册链: tron (USDT)")
     }
+    // 注册 Tron TRX（如果需要）
+    if len(config.Tron.Wallets) > 0 {
+        tronTRX := &TronTRXChain{config: config.Tron}
+        registerChainToken(tronTRX, "tron", "trx")
+        log.Println("注册链: tron (TRX)")
+    }
+    // 注册 Polygon USDT
     if len(config.Polygon.Wallets) > 0 {
-        poly := NewPolygonChain(config.Polygon)
-        registerChain(poly)
-        log.Println("注册链: polygon")
+        polygon := NewPolygonChain(config.Polygon)
+        registerChainToken(polygon, "polygon", "usdt")
+        log.Println("注册链: polygon (USDT)")
+    }
+    // 注册 BSC USDT
+    if len(config.BSC.Wallets) > 0 {
+        bsc := NewBSCChain(config.BSC)
+        registerChainToken(bsc, "bsc", "usdt")
+        log.Println("注册链: bsc (USDT)")
     }
 
     if config.Telegram.Enabled {
@@ -49,6 +64,17 @@ func main() {
     go StartSSHManagement(config)
 
     router := gin.Default()
+
+    // 根路径显示 fake.html
+    router.GET("/", func(c *gin.Context) {
+        data, err := webFiles.ReadFile("web/fake.html")
+        if err != nil {
+            c.String(http.StatusNotFound, "fake.html not found")
+            return
+        }
+        c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+    })
+
     api := router.Group("/payments/gmpay/v1")
     {
         api.POST("/order/create-transaction", CreateTransaction)
@@ -57,7 +83,7 @@ func main() {
     router.GET("/pay/:order_id", PayPage)
     router.GET("/api/order/:order_id", GetOrderInfo)
     router.GET("/api/order/:order_id/status", GetOrderStatus)
-    // 修改静态文件路由
+
     webSub, _ := fs.Sub(webFiles, "web")
     router.StaticFS("/static", http.FS(webSub))
 
