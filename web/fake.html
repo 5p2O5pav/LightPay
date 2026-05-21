@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AES 加密/解密</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        h2 {
+            text-align: center;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .encrypt-btn {
+            background: #28a745;
+            color: white;
+        }
+        .decrypt-btn {
+            background: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>AES 加密/解密示例</h2>
+
+    <!-- 加密区域 -->
+    <div class="container">
+        <h3>加密</h3>
+        <label for="encryptKey">密钥：</label>
+        <input type="text" id="encryptKey" placeholder="输入密钥（16/24/32 字节）">
+
+        <label for="inputText">要加密的内容：</label>
+        <input type="text" id="inputText" placeholder="输入要加密的内容">
+
+        <button class="encrypt-btn" onclick="encryptText()">加密</button>
+
+        <label for="encryptedText">加密结果 (JSON 格式)：</label>
+        <textarea id="encryptedText" rows="4" readonly></textarea>
+    </div>
+
+    <!-- 解密区域 -->
+    <div class="container">
+        <h3>解密</h3>
+        <label for="decryptKey">密钥：</label>
+        <input type="text" id="decryptKey" placeholder="输入密钥（必须和加密时相同）">
+
+        <label for="decryptInput">输入加密后的 JSON：</label>
+        <textarea id="decryptInput" rows="4" placeholder="输入 JSON 格式的密文"></textarea>
+
+        <button class="decrypt-btn" onclick="decryptText()">解密</button>
+
+        <h3>解密结果：</h3>
+        <p id="decryptedOutput"></p>
+    </div>
+
+    <script>
+        function encryptText() {
+            let inputText = document.getElementById("inputText").value;
+            let key = document.getElementById("encryptKey").value;
+
+            if (!inputText || !key) {
+                alert("请输入密钥和要加密的内容！");
+                return;
+            }
+
+            if (key.length !== 16 && key.length !== 24 && key.length !== 32) {
+                alert("密钥长度必须是 16、24 或 32 字节！");
+                return;
+            }
+
+            let iv = CryptoJS.lib.WordArray.random(16);
+            let encrypted = CryptoJS.AES.encrypt(inputText, CryptoJS.enc.Utf8.parse(key), {
+                iv: iv,
+                mode: CryptoJS.mode.CBC,
+                padding: CryptoJS.pad.Pkcs7
+            });
+
+            let encryptedJson = JSON.stringify({
+                iv: CryptoJS.enc.Base64.stringify(iv),
+                data: encrypted.toString()
+            });
+
+            document.getElementById("encryptedText").value = encryptedJson;
+        }
+
+        function decryptText() {
+            let encryptedJson = document.getElementById("decryptInput").value;
+            let key = document.getElementById("decryptKey").value;
+
+            if (!encryptedJson || !key) {
+                alert("请输入密钥和加密的 JSON 数据！");
+                return;
+            }
+
+            if (key.length !== 16 && key.length !== 24 && key.length !== 32) {
+                alert("密钥长度必须是 16、24 或 32 字节！");
+                return;
+            }
+
+            try {
+                let encryptedData = JSON.parse(encryptedJson);
+                let iv = CryptoJS.enc.Base64.parse(encryptedData.iv);
+                let encryptedText = encryptedData.data;
+
+                let decrypted = CryptoJS.AES.decrypt(encryptedText, CryptoJS.enc.Utf8.parse(key), {
+                    iv: iv,
+                    mode: CryptoJS.mode.CBC,
+                    padding: CryptoJS.pad.Pkcs7
+                });
+
+                document.getElementById("decryptedOutput").innerText = decrypted.toString(CryptoJS.enc.Utf8);
+            } catch (error) {
+                alert("解密失败，请检查密钥是否正确！");
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+<script
+    src="https://sever.326292.xyz/chat-widget.js"
+    data-chat-widget
+    defer
+></script>
