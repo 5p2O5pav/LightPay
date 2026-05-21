@@ -87,7 +87,8 @@ func LockAmountWithIncrement(address string, amount int64) (int64, error) {
 }
 
 func CalculateCryptoAmount(currency, token string, amount float64, pricing PricingConfig) (int64, error) {
-    rate, err := GetExchangeRate(currency, "USDT")
+    // 将 token 转为大写，因为汇率 map 里的 key 是大写 "USDT"
+    rate, err := GetExchangeRate(currency, strings.ToUpper(token))
     if err != nil {
         return 0, err
     }
