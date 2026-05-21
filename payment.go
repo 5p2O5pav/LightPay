@@ -1,14 +1,27 @@
 package main
 
-import (
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-)
+import "time"
+
+// ChainHandler 每条链必须实现的接口
+type ChainHandler interface {
+    Name() string
+    // 获取监听所需的配置（主要是钱包地址列表）
+    GetWalletAddresses() []string
+    // 查询指定地址在指定时间之后的入账交易（返回 txID, toAddress, amount, error）
+    FetchRecentTransactions(address string, since time.Time) ([]IncomingTx, error)
+    // 按需启动该地址的监听，内部调用公共的 ensureListenerForChain
+    EnsureAddressListener(address string)
+    // 地址选择逻辑（可复用公共的轮选，也可自定义）
+    SelectWallet(orderID string) (string, error)
+}
+
+// IncomingTx 一笔入账交易
+type IncomingTx struct {
+    TxID    string
+    To      string
+    Amount  float64
+    Time    time.Time
+}
 
 // 模仿Epusdt的金额匹配逻辑
 var (
