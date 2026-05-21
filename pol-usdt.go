@@ -30,19 +30,21 @@ func (p *PolygonChain) SelectWallet(orderID string) (string, error) {
     return SelectWalletFromList(p.config.Wallets, orderID), nil
 }
 
-func (p *PolygonChain) FetchRecentTransactions(address string, since time.Time) ([]IncomingTx, error) {
+func (p *PolygonChain) FetchRecentTransactions(address, token string, since time.Time) ([]IncomingTx, error) {
+    if token != "usdt" {
+        return nil, nil
+    }
     toAddr := common.HexToAddress(address)
     contract := common.HexToAddress(p.config.USDTContract)
 
-    // 获取当前区块号
     header, err := p.client.HeaderByNumber(context.Background(), nil)
     if err != nil {
         return nil, err
     }
     endBlock := header.Number.Uint64()
-    startBlock := endBlock - 500 // 粗略范围，可优化
-    if startBlock < 0 {
-        startBlock = 0
+    startBlock := uint64(0)
+    if endBlock > 5000 {
+        startBlock = endBlock - 5000
     }
 
     query := ethereum.FilterQuery{
@@ -62,26 +64,21 @@ func (p *PolygonChain) FetchRecentTransactions(address string, since time.Time) 
 
     var txs []IncomingTx
     for _, vLog := range logs {
-        amount := new(big.Int).SetBytes(vLog.Data)
-        // 转为最小单位（USDT 6 位小数），避免大数溢出使用 Int64 安全转换
-        amountInt := new(big.Int).Div(amount, big.NewInt(1e6)).Int64()
-        block, err := p.client.BlockByNumber(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
-        var blockTime time.Time
-        if err == nil {
-            blockTime = time.Unix(int64(block.Time()), 0)
-        } else {
-            blockTime = time.Now()
-        }
+        rawAmount := new(big.Int).SetBytes(vLog.Data)
+        // Polygon USDT 精度 6，内部精度 3，缩放因子 = 1000
+        internalAmount := new(big.Int).Div(rawAmount, big.NewInt(1000)).Int64()
+        block, _ := p.client.BlockByNumber(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+        blockTime := time.Unix(int64(block.Time()), 0)
         txs = append(txs, IncomingTx{
             TxID:   vLog.TxHash.Hex(),
             To:     address,
-            Amount: amountInt,
+            Amount: internalAmount,
             Time:   blockTime,
         })
     }
     return txs, nil
 }
 
-func (p *PolygonChain) EnsureAddressListener(address string) {
-    ensureListenerForChain(p, address)
+func (p *PolygonChain) EnsureAddressListener(address, token string) {
+    ensureListenerForChain(p, address, token)
 }
