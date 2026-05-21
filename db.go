@@ -3,14 +3,16 @@ package main
 import (
     "database/sql"
     "time"
-    _ "github.com/mattn/go-sqlite3"
+
+    _ "modernc.org/sqlite" // 纯 Go 驱动，不需要 CGO
 )
 
 var db *sql.DB
 
 func InitDB(cfg *Config) {
     var err error
-    db, err = sql.Open("sqlite3", cfg.Database)
+    // 驱动名改为 "sqlite"（modernc.org/sqlite 使用这个驱动名）
+    db, err = sql.Open("sqlite", cfg.Database)
     if err != nil {
         panic(err)
     }
@@ -31,13 +33,6 @@ func InitDB(cfg *Config) {
         expired_at DATETIME NOT NULL,
         created_at DATETIME NOT NULL
     )`)
-    // 兼容旧表（如果没有 pid 或 fiat_amount 列则添加，新表直接创建）
-    if _, err := db.Exec("ALTER TABLE orders ADD COLUMN pid TEXT"); err != nil {
-        // 列已存在则忽略
-    }
-    if _, err := db.Exec("ALTER TABLE orders ADD COLUMN fiat_amount REAL"); err != nil {
-        // 列已存在则忽略
-    }
 }
 
 func SaveOrder(order *Order) error {
