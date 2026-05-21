@@ -104,11 +104,12 @@ func GetExchangeRate(from, to string) (float64, error) {
         "CNY-USDT": 0.138,
         "EUR-USDT": 1.087,
     }
-    key := from + "-" + to
+    // 统一转为大写，避免大小写问题
+    key := strings.ToUpper(from) + "-" + strings.ToUpper(to)
     if rate, ok := rates[key]; ok {
         return rate, nil
     }
-    return 0, fmt.Errorf("不支持的汇率")
+    return 0, fmt.Errorf("不支持的汇率: %s", key)
 }
 
 func SelectWalletFromList(wallets []string, orderID string) string {
