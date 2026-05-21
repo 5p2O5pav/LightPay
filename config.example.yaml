@@ -55,7 +55,7 @@ pricing:
 
   # ----- 手动汇率配置（仅当 mode=manual 时生效）-----
   manual_rates:
-    CNY_USDT: 7.20      # 1 USDT = 7.20 人民币
+    CNY_USDT: 6.8      # 1 USDT = 6.8 人民币
     CNY_TRX: 2.2       # 1 TRX  = 2.2 人民币
 
   # ----- 实时汇率配置（仅当 mode=realtime 时生效）-----
