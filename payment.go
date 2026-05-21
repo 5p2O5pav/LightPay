@@ -4,6 +4,7 @@ import (
     "crypto/md5"
     "encoding/hex"
     "fmt"
+    "log"
     "sort"
     "strconv"
     "strings"
@@ -39,7 +40,7 @@ type LockedAmount struct {
     ExpiresAt time.Time
 }
 
-// 与 PHP 完全一致的签名算法
+// MakeSignature 用于 map[string]string 类型的签名（简单兼容，主要用于回调）
 func MakeSignature(params map[string]string, token string) string {
     keys := make([]string, 0, len(params))
     for k := range params {
@@ -55,6 +56,62 @@ func MakeSignature(params map[string]string, token string) string {
     signStr := strings.Join(pairs, "&") + token
     hash := md5.Sum([]byte(signStr))
     return strings.ToLower(hex.EncodeToString(hash[:]))
+}
+
+// MakeSignatureFromMap 完全兼容 PHP Epusdt 的签名算法（支持 map[string]interface{} 和浮点数特殊处理）
+func MakeSignatureFromMap(params map[string]interface{}, token string) string {
+    keys := make([]string, 0, len(params))
+    for k, v := range params {
+        if k == "signature" {
+            continue
+        }
+        if v == nil {
+            continue
+        }
+        if s, ok := v.(string); ok && s == "" {
+            continue
+        }
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
+
+    var pairs []string
+    for _, k := range keys {
+        v := params[k]
+        var valueStr string
+        switch val := v.(type) {
+        case float64:
+            valueStr = formatAmountPHP(val)
+        case float32:
+            valueStr = formatAmountPHP(float64(val))
+        case int:
+            valueStr = formatAmountPHP(float64(val))
+        case int32:
+            valueStr = formatAmountPHP(float64(val))
+        case int64:
+            valueStr = formatAmountPHP(float64(val))
+        case string:
+            valueStr = val
+        default:
+            valueStr = fmt.Sprint(val)
+        }
+        pairs = append(pairs, fmt.Sprintf("%s=%s", k, valueStr))
+    }
+
+    signStr := strings.Join(pairs, "&") + token
+    hash := md5.Sum([]byte(signStr))
+    return strings.ToLower(hex.EncodeToString(hash[:]))
+}
+
+// formatAmountPHP 模拟 PHP 的 rtrim(rtrim(sprintf('%.12F', $v), '0'), '.')
+func formatAmountPHP(v float64) string {
+    s := strconv.FormatFloat(v, 'f', 12, 64)
+    s = strings.TrimRight(s, "0")
+    s = strings.TrimRight(s, ".")
+    if s == "" {
+        s = "0"
+    }
+    return s
 }
 
 func LockAmountWithIncrement(address string, amount int64) (int64, error) {
@@ -88,16 +145,21 @@ func LockAmountWithIncrement(address string, amount int64) (int64, error) {
 }
 
 func CalculateCryptoAmount(currency, token string, amount float64, pricing PricingConfig) (int64, error) {
-    // 将 token 转为大写，因为汇率 map 里的 key 是大写 "USDT"
+    // token 转为大写，因为汇率 map 中的 key 是大写 "USDT"
     rate, err := GetExchangeRate(currency, strings.ToUpper(token))
     if err != nil {
+        log.Printf("[ERROR] 获取汇率失败: %v", err)
         return 0, err
     }
+    log.Printf("[DEBUG] 汇率: 1 %s = %.6f %s", strings.ToUpper(currency), rate, strings.ToUpper(token))
     usdtAmount := amount * rate
     if pricing.MarkupPercent > 0 {
         usdtAmount *= (1 + pricing.MarkupPercent/100.0)
+        log.Printf("[DEBUG] 加价后 USDT 金额: %.6f (加价比例 %.2f%%)", usdtAmount, pricing.MarkupPercent)
     }
-    return int64(usdtAmount * 1e6), nil
+    minUnit := int64(usdtAmount * 1e6)
+    log.Printf("[DEBUG] 最小单位金额: %d", minUnit)
+    return minUnit, nil
 }
 
 func GetExchangeRate(from, to string) (float64, error) {
@@ -106,7 +168,6 @@ func GetExchangeRate(from, to string) (float64, error) {
         "CNY-USDT": 0.138,
         "EUR-USDT": 1.087,
     }
-    // 统一转为大写，避免大小写问题
     key := strings.ToUpper(from) + "-" + strings.ToUpper(to)
     if rate, ok := rates[key]; ok {
         return rate, nil
@@ -127,13 +188,17 @@ func SelectWalletFromList(wallets []string, orderID string) string {
 
 // 支付成功后：更新状态 + 发送异步通知
 func handlePaymentSuccess(chain, txID, address string, amount int64) {
+    log.Printf("[INFO] 支付成功回调: chain=%s, txID=%s, address=%s, amount=%d", chain, txID, address, amount)
     order, err := GetPendingOrderByAddressAndAmount(chain, address, amount)
     if err != nil {
+        log.Printf("[ERROR] 未找到匹配的订单: %v", err)
         return
     }
     if err := MarkOrderPaid(order.TradeID); err != nil {
+        log.Printf("[ERROR] 标记订单支付失败: %v", err)
         return
     }
+    log.Printf("[INFO] 订单 %s 已标记为 paid", order.TradeID)
     // 发送商户回调
     go sendOrderNotify(order)
 
