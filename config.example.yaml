@@ -1,49 +1,71 @@
+# LightPay 配置文件
+# 请根据实际环境修改各项参数
+
+# ====================== 服务器基础配置 ======================
 server:
-  listen: ":8080"
-  domain: "pay.example.com"
+  listen: ":8080"               # 服务监听端口，格式 :端口号，例如 :8080
+  domain: "pay.example.com"     # 你的支付页面域名（用于生成支付链接，不需要带 https://）
 
-database: "data/lightpay.db"
+# ====================== 数据库配置 ======================
+database: "data/lightpay.db"    # SQLite 数据库文件存放路径（相对或绝对路径）
 
-api_token: "your-secret-signature-token"
+# ====================== API 签名密钥 ======================
+api_token: "your-secret-signature-token"   # 与商户端约定的 token，用于验证订单请求的合法性
 
+# ====================== TRON 链配置（USDT-TRC20 / TRX） ======================
 tron:
-  api_key: "your-trongrid-api-key"
-  network: "mainnet"
-  wallets:
+  api_key: "your-trongrid-api-key"   # TronGrid API Key（免费申请：https://www.trongrid.io/）
+  network: "mainnet"                 # 网络：mainnet（主网）或 shasta（测试网）
+  wallets:                           # 收款钱包地址列表（支持多地址轮询，仅使用单地址时，需删除多余的示例）
     - "TRX_WALLET_1"
     - "TRX_WALLET_2"
 
+# ====================== Polygon 链配置（USDT） ======================
 polygon:
-  rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"
-  usdt_contract: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
-  wallets:
+  rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"   # Polygon 节点 RPC URL（推荐 Alchemy/Infura）
+  usdt_contract: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"    # USDT 合约地址（Polygon 主网）
+  wallets:                               # 收款钱包地址列表
     - "POLY_WALLET_1"
 
+# ====================== BSC 链配置（BEP-20 USDT） ======================
 bsc:
-  rpc_url: "https://bsc-dataseed.binance.org/"
-  usdt_contract: "0x55d398326f99059fF775485246999027B3197955"
+  rpc_url: "https://bsc-dataseed.binance.org/"          # BSC 公共 RPC 节点（也可用私有节点）
+  usdt_contract: "0x55d398326f99059fF775485246999027B3197955"  # BSC 上 USDT 合约地址
   wallets:
     - "BSC_WALLET_1"
 
+# ====================== Telegram 机器人通知（可选） ======================
 telegram:
-  enabled: false
-  bot_token: ""
-  chat_id: 0
+  enabled: false                      # 是否启用 Telegram 通知
+  bot_token: ""                       # Bot Token（从 @BotFather 获取）
+  chat_id: 0                          # 接收消息的群组或个人 Chat ID
 
+# ====================== 汇率与价格计算 ======================
 pricing:
+  # 默认法币单位（当商户请求未传 currency 时使用）
   default_currency: "CNY"
+
+  # 加价百分比，例如 1.5 表示在原始汇率基础上上浮 1.5%
   markup_percent: 1.5
-  mode: "realtime"                     # 或 manual
+
+  # 汇率获取模式：
+  #   manual  - 使用下方 manual_rates 中的固定汇率
+  #   realtime- 从网络 API 实时获取汇率（需配置 realtime 段）
+  mode: "realtime"
+
+  # ----- 手动汇率配置（仅当 mode=manual 时生效）-----
   manual_rates:
-    CNY_USDT: 7.20
-    CNY_TRX: 0.88
+    CNY_USDT: 7.20      # 1 USDT = 7.20 人民币
+    CNY_TRX: 2.2       # 1 TRX  = 2.2 人民币
+
+  # ----- 实时汇率配置（仅当 mode=realtime 时生效）-----
   realtime:
-    provider: "coingecko"
-    url: "https://api.coingecko.com/api/v3/simple/price"
-    timeout_seconds: 5
-    retry_count: 2
-    cache_seconds: 60
-    token_ids:
+    provider: "coingecko"          # 服务商名称（仅作标识，目前固定使用 CoinGecko 格式）
+    url: "https://api.coingecko.com/api/v3/simple/price"   # API 地址
+    timeout_seconds: 8             # HTTP 请求超时秒数
+    retry_count: 3                 # 请求失败时的重试次数
+    cache_seconds: 120             # 汇率缓存时间（秒），避免每次请求都调用 API
+    token_ids:                     # 币种 -> CoinGecko 内部 ID 映射
       USDT: "tether"
       TRX: "tron"
       BUSD: "binance-usd"
