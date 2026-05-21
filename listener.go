@@ -10,9 +10,8 @@ var (
     listenerMapMu sync.Mutex
 )
 
-// ensureListenerForChain 保证链的地址被监听
-func ensureListenerForChain(chain ChainHandler, address string) {
-    key := chain.Name() + ":" + address
+func ensureListenerForChain(chain ChainHandler, address, token string) {
+    key := chain.Name() + ":" + token + ":" + address
     listenerMapMu.Lock()
     defer listenerMapMu.Unlock()
 
@@ -31,17 +30,16 @@ func ensureListenerForChain(chain ChainHandler, address string) {
         for {
             select {
             case <-ticker.C:
-                // 先清理过期订单
                 expireOrders()
-                // 检查是否还有待支付订单
-                if !hasPendingOrdersForChain(chain.Name(), address) {
+                // 检查是否还有待支付订单（该地址+该币种）
+                if !hasPendingOrdersForChainToken(chain.Name(), address, token) {
                     listenerMapMu.Lock()
                     delete(listenerMap, key)
                     listenerMapMu.Unlock()
                     return
                 }
 
-                txs, err := chain.FetchRecentTransactions(address, lastCheck)
+                txs, err := chain.FetchRecentTransactions(address, token, lastCheck)
                 if err != nil {
                     continue
                 }
@@ -49,10 +47,9 @@ func ensureListenerForChain(chain ChainHandler, address string) {
                     lastCheck = time.Now()
                 }
                 for _, tx := range txs {
-                    // 精确匹配金额（最小单位）
-                    order, err := GetPendingOrderByAddressAndAmount(chain.Name(), address, tx.Amount)
+                    order, err := GetPendingOrderByAddressAmountToken(chain.Name(), address, tx.Amount, token)
                     if err == nil && order != nil {
-                        handlePaymentSuccess(chain.Name(), tx.TxID, address, tx.Amount)
+                        handlePaymentSuccess(chain.Name(), token, tx.TxID, address, tx.Amount)
                     }
                 }
             case <-stop:
