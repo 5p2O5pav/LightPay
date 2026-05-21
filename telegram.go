@@ -20,17 +20,18 @@ func StartTelegramBot(cfg *Config) {
         return
     }
 
-    ctx := context.Background()
-    // 监听 /today 命令
-    tgBot.OnText("/today", func(ctx context.Context, msg *bot.Message) {
-        summary := getTodaySummary()
-        tgBot.SendMessage(ctx, &bot.SendMessageParams{
-            ChatID: cfg.Telegram.ChatID,
-            Text:   summary,
-        })
-    })
+    // 注册处理函数
+    tgBot.RegisterHandler(bot.HandlerFunc(func(ctx context.Context, b *bot.Bot, update *bot.Update) {
+        if update.Message != nil && update.Message.Text == "/today" {
+            summary := getTodaySummary()
+            b.SendMessage(ctx, &bot.SendMessageParams{
+                ChatID: cfg.Telegram.ChatID,
+                Text:   summary,
+            })
+        }
+    }))
 
-    // 每日定时总结
+    // 每日定时总结（北京时间 20:00）
     c := cron.New()
     c.AddFunc("0 20 * * *", func() {
         summary := getTodaySummary()
@@ -41,14 +42,16 @@ func StartTelegramBot(cfg *Config) {
     })
     c.Start()
 
-    go tgBot.Start(ctx)
+    go tgBot.Start(context.Background())
 }
 
 func notifyTelegramPayment(order *Order) {
     if tgBot == nil {
         return
     }
-    msg := fmt.Sprintf("✅ 收到新付款\n\n订单号: %s\n链: %s\n金额: %.6f %s", order.OrderID, order.Chain, float64(order.Amount)/1e6, order.Token)
+    amount := float64(order.Amount) / 1e6 // 最小单位转正常单位
+    msg := fmt.Sprintf("✅ 收到新付款\n\n订单号: %s\n链: %s\n金额: %.6f %s",
+        order.OrderID, order.Chain, amount, order.Token)
     tgBot.SendMessage(context.Background(), &bot.SendMessageParams{
         ChatID: config.Telegram.ChatID,
         Text:   msg,
@@ -62,8 +65,7 @@ func getTodaySummary() string {
     msg += "══════════════════════\n"
     totalCNY := 0.0
     for chain, amount := range stats {
-        // 假定所有代币为 USDT，汇率 7.25（示例）
-        cny := float64(amount) / 1e6 * 7.25
+        cny := float64(amount) / 1e6 * 7.25 // 假设 USDT/CNY 汇率
         totalCNY += cny
         msg += fmt.Sprintf("%s: %.2f USDT (≈¥%.2f)\n", chain, float64(amount)/1e6, cny)
     }
