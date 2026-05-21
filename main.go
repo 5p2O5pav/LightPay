@@ -3,6 +3,7 @@ package main
 import (
     "context"
     "embed"
+    "io/fs"
     "log"
     "net/http"
     "os"
@@ -56,8 +57,9 @@ func main() {
     router.GET("/pay/:order_id", PayPage)
     router.GET("/api/order/:order_id", GetOrderInfo)
     router.GET("/api/order/:order_id/status", GetOrderStatus)
-    // 静态文件映射为 /static，与 index.html 中引用一致
-    router.StaticFS("/static", http.FS(webFiles))
+    // 修改静态文件路由
+    webSub, _ := fs.Sub(webFiles, "web")
+    router.StaticFS("/static", http.FS(webSub))
 
     srv := &http.Server{
         Addr:    config.Server.Listen,
