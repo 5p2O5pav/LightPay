@@ -23,7 +23,7 @@ func ensureListenerForChain(chain ChainHandler, address, token string) {
     listenerMap[key] = stop
 
     go func() {
-        ticker := time.NewTicker(3 * time.Second)
+        ticker := time.NewTicker(10 * time.Second)
         defer ticker.Stop()
         lastCheck := time.Now().Add(-30 * time.Second)
 
