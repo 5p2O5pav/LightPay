@@ -57,6 +57,13 @@ func CreateTransaction(c *gin.Context) {
     }
     signature := fmt.Sprint(req["signature"])
     expectedSign := MakeSignature(params, config.ApiToken)
+
+// ========== 添加这三行日志 ==========
+log.Printf("请求中的 signature: %s", signature)
+log.Printf("服务端计算的签名: %s", expectedSign)
+log.Printf("用于签名的参数: %+v", params)
+// =================================
+    
     if signature != expectedSign {
         c.JSON(http.StatusUnauthorized, gin.H{"status_code": 401, "message": "签名验证失败"})
         return
