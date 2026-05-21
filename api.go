@@ -41,6 +41,9 @@ func CreateTransaction(c *gin.Context) {
 		c.JSON(500, gin.H{"status_code": 500, "message": "无可用钱包"})
 		return
 	}
+
+	// 确保该地址的监听器已启动
+	ensureListenerForAddress(address, config)
 	
 	// 汇率转换
 	if currency != "USD" {
