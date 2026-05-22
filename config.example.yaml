@@ -60,7 +60,7 @@ pricing:
 
   # ----- 实时汇率配置（仅当 mode=realtime 时生效）-----
   realtime:
-    provider: "coingecko"          # 服务商名称（仅作标识，目前固定使用 CoinGecko 格式）
+    provider: "coingecko"          # 服务商名称（仅作标识，默认使用 CoinGecko 格式）
     url: "https://api.coingecko.com/api/v3/simple/price"   # API 地址
     timeout_seconds: 8             # HTTP 请求超时秒数
     retry_count: 3                 # 请求失败时的重试次数
