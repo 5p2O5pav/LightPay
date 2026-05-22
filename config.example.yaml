@@ -22,7 +22,7 @@ tron:
 
 # ====================== Polygon 链配置（USDT） ======================
 polygon:
-  rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"   # Polygon 节点 RPC URL（推荐 Alchemy/Infura）
+  rpc_url: "https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY"   # Polygon 节点 RPC URL（前往 https://login.alchemy.com/ 注册获取）
   usdt_contract: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"    # USDT 合约地址（Polygon 主网）
   wallets:                               # 收款钱包地址列表
     - "POLY_WALLET_1"
